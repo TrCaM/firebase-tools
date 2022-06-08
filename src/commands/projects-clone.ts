@@ -16,7 +16,7 @@ import { requireAuth } from "../requireAuth";
 import { logBullet, logWarning } from "../utils";
 import { assert } from "console";
 
-module.exports = new Command("projects:clone [projectId]")
+export const command = new Command("projects:clone [projectId]")
   .description(
     "export a terraform config file which can be used to clone the current firebase project."
   )

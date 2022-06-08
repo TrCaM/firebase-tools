@@ -143,6 +143,7 @@ export function load(client: any): any {
   client.projects.addfirebase = loadCommand("projects-addfirebase");
   client.projects.create = loadCommand("projects-create");
   client.projects.list = loadCommand("projects-list");
+  client.projects.clone = loadCommand("projects-clone");
   client.remoteconfig = {};
   client.remoteconfig.get = loadCommand("remoteconfig-get");
   client.remoteconfig.rollback = loadCommand("remoteconfig-rollback");

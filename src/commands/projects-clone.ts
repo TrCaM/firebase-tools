@@ -11,7 +11,6 @@ import {
   generateFirebaseTerraformExportConfig,
   PROJECTS_CLONE_QUESTIONS,
 } from "../terraform/terraformGenerator";
-import { prompt } from "../prompt";
 import { requireAuth } from "../requireAuth";
 import { logBullet, logWarning } from "../utils";
 import { assert } from "console";
@@ -43,24 +42,29 @@ export const command = new Command("projects:clone [projectId]")
         throw new FirebaseError("Project ID cannot be empty");
       }
 
-      const cloningProjectId = needProjectId(options);
-      const cloningProjectMetadata = await getFirebaseProject(cloningProjectId);
-      const rulesetName = await getLatestRulesetName(cloningProjectId, "cloud.firestore") || "";
+      if (!fs.existsSync("./terraform")) {
+        await promisify(fs.mkdir)("terraform");
+      }
+
+      const originProjectId = needProjectId(options);
+      const originProjectMetadata = await getFirebaseProject(originProjectId);
+      const rulesetName = await getLatestRulesetName(originProjectId, "cloud.firestore") || "";
       logBullet(rulesetName || "No ruleset found");
       if (rulesetName) {
         const rulesetFiles: RulesetFile[] = await getRulesetContent(rulesetName);
         // TODO: Need a cleaner code here.
         assert(rulesetFiles.length === 1);
         // Update firestore.rules file
-        await promisify(fs.writeFile)(rulesetFiles[0].name, rulesetFiles[0].content);
+        await promisify(fs.writeFile)(`terraform/${rulesetFiles[0].name}`, rulesetFiles[0].content);
         logBullet("firestore.rules generated/updated using the cloning project.");
       }
 
       const exportConfig: FirebaseTerraformExportMetadata = {
-        projectId: projectId,
-        projectDisplayName: `Copy of ${cloningProjectMetadata.displayName}`,
+        projectId,
+        originProjectId,
+        projectDisplayName: `${originProjectMetadata.displayName}`,
         region: "nam5",
-        locationId: cloningProjectMetadata.resources?.locationId || "us-central",
+        locationId: originProjectMetadata.resources?.locationId || "us-central",
         zone: "us-central1-c", // Figure out what zone we actually used for this project?
         apis: [
           "serviceusage.googleapis.com",
@@ -74,7 +78,8 @@ export const command = new Command("projects:clone [projectId]")
         ]
       };
 
+
       await generateFirebaseTerraformExportConfig(exportConfig, "project_clone.tf.json");
-      logBullet("project_clone.tf.json generated.");
+      logBullet("terraform/project_clone.tf.json generated.");
     }
   );

@@ -1,11 +1,15 @@
 import * as clc from "cli-color";
 import * as fs from "fs";
 
+import { Client } from "../apiv2";
 import { promisify } from "util";
+import * as api from "../api";
 import { Question, promptOnce } from "../prompt";
+import { logBullet, logWarning } from "../utils";
 
 export interface FirebaseTerraformExportMetadata {
   projectId: string;
+  originProjectId: string;
   projectDisplayName: string;
   region: string;
   locationId: string;
@@ -97,8 +101,16 @@ const GOOGLE_FIRESTORE_RULES_BLOCK = {
         }
       }
     }
-  }
-}
+  },
+  google_firebaserules_release: {
+    primary: {
+      name: "cloud.firestore",
+      provider: "google-beta",
+      ruleset_name: "projects/${google_project.default.project_id}/rulesets/${google_firebaserules_ruleset.firestore.name}",
+      project: "${google_project.default.project_id}",
+    },
+  },
+};
 
 export const PROJECTS_CLONE_QUESTIONS: Question[] = [
   {
@@ -132,9 +144,84 @@ function generateLocalsBlock(exportConfig: FirebaseTerraformExportMetadata): any
   };
 }
 
+interface IdpConfig {
+  name: string;
+  clientId: string;
+  clientSecret: string;
+};
+
+const firestoreApiClient = new Client({
+  urlPrefix: api.firestoreOrigin,
+  auth: true,
+  apiVersion: "v1beta1",
+});
+
+const authIdpClient = new Client({
+  urlPrefix: api.identityOrigin,
+  auth: true,
+  apiVersion: "admin/v2",
+});
+
+async function generateIdPConfigBlock(exportConfig: FirebaseTerraformExportMetadata): Promise<any> {
+  const authConfig = await authIdpClient.request<any, IdpConfig>({
+    method: "GET",
+    path: `/projects/${exportConfig.projectId}/defaultSupportedIdpConfigs/google.com`
+  });
+  return {
+    google_identity_platform_default_supported_idp_config: {
+      gsi: {
+        provider: "google-beta",
+        enabled: true,
+        idp_id: "google.com",
+        client_id: authConfig.body.clientId,
+        client_secret: authConfig.body.clientSecret,
+      },
+    },
+  };
+}
+
+function addslashes(str: string) {
+    return (str + '').replace(/[\\"']/g, '\\$&').replace(/\u0000/g, '\\0');
+}
+
+async function generateFirestoreDocumentBlock(exportConfig: FirebaseTerraformExportMetadata): Promise<any> {
+  const databasePath = `projects/${exportConfig.originProjectId}/databases/(default)`
+  const collections = (await firestoreApiClient.request<any, any>({
+    method: "POST",
+    path: `${databasePath}/documents:listCollectionIds`
+  })).body.collectionIds;
+
+  let documentsResourceBlocks = {};
+  let curDocumentResourceCount = 1;
+
+  for (const collectionId of collections) {
+    const documents = (await firestoreApiClient.request<any, any>({
+      method: "GET",
+      path: `/${databasePath}/documents/${collectionId}`
+    })).body.documents;
+    for (const document of documents) {
+      const documentId = document.name.slice(document.name.lastIndexOf("/") + 1);
+
+      documentsResourceBlocks = {
+        ...documentsResourceBlocks,
+        [`document-${curDocumentResourceCount++}`]: {
+          provider: "google-beta",
+          project: "${google_project.default.project_id}",
+          collection: collectionId,
+          document_id: documentId,
+          fields: JSON.stringify(document.fields),
+        },
+      };
+    }
+  }
+
+  return { google_firestore_document: documentsResourceBlocks };
+}
+
+
 export async function generateFirebaseTerraformExportConfig(
   exportConfig: FirebaseTerraformExportMetadata,
-  outputPath: string
+  outputFile: string
 ): Promise<void> {
   const jsonContent = JSON.stringify({
       ...TERRAFORM_BLOCK,
@@ -149,8 +236,10 @@ export async function generateFirebaseTerraformExportConfig(
         ...GOOGLE_APP_ENGINE_APPLICATION_BLOCK,
         ...GOOGLE_FIRESTORE_RULES_BLOCK,
         ...GOOGLE_FIREBASE_PROJECT_BLOCK,
+        ...await generateFirestoreDocumentBlock(exportConfig),
+        // ...await generateIdPConfigBlock(exportConfig),
       },
   }, null, 2);
 
-  await promisify(fs.writeFile)(outputPath, jsonContent);
+  await promisify(fs.writeFile)(`terraform/${outputFile}`, jsonContent);
 }

@@ -163,19 +163,34 @@ const authIdpClient = new Client({
 });
 
 async function generateIdPConfigBlock(exportConfig: FirebaseTerraformExportMetadata): Promise<any> {
-  const authConfig = await authIdpClient.request<any, IdpConfig>({
-    method: "GET",
-    path: `/projects/${exportConfig.projectId}/defaultSupportedIdpConfigs/google.com`
-  });
-  return {
-    google_identity_platform_default_supported_idp_config: {
+  let authConfig;
+  try {
+    authConfig = await authIdpClient.request<any, IdpConfig>({
+      method: "GET",
+      path: `/projects/${exportConfig.projectId}/defaultSupportedIdpConfigs/google.com`
+    });
+  } catch (err: any) {
+    authConfig = null
+  }
+  let idpBlock: any = {
+  };
+
+  if (true) {
+    idpBlock = {
       gsi: {
         provider: "google-beta",
         enabled: true,
         idp_id: "google.com",
-        client_id: authConfig.body.clientId,
-        client_secret: authConfig.body.clientSecret,
+        client_id: authConfig?.body.clientId || "TODO",
+        client_secret: authConfig?.body.clientSecret || "TODO",
       },
+      ...idpBlock,
+    };
+  }
+
+  return {
+    google_identity_platform_default_supported_idp_config: {
+      ...idpBlock,
     },
   };
 }
@@ -237,7 +252,7 @@ export async function generateFirebaseTerraformExportConfig(
         ...GOOGLE_FIRESTORE_RULES_BLOCK,
         ...GOOGLE_FIREBASE_PROJECT_BLOCK,
         ...await generateFirestoreDocumentBlock(exportConfig),
-        // ...await generateIdPConfigBlock(exportConfig),
+        ...await generateIdPConfigBlock(exportConfig),
       },
   }, null, 2);
 

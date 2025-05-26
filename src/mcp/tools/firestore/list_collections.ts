@@ -13,14 +13,8 @@ export const list_collections = tool(
       // TODO: support multiple databases
       // database: z
       //   .string()
-      //   .nullish()
+      //   .optional()
       //   .describe("Database id to use. Defaults to `(default)` if unspecified."),
-      document_path: z
-        .string()
-        .nullish()
-        .describe(
-          "a parent document to list subcollections under. only needed for subcollections, omit to list top-level collections",
-        ),
     }),
     annotations: {
       title: "List Firestore collections",

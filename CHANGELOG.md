@@ -1,4 +1,5 @@
-- Changed artifact registry cleanup policy error to warn for CI/CD workloads #8513
-- Enhance firebase init apphosting to support local source deploys. (#8479)
-- Fixed issue where `firebase init hosting:github` didn't correctly parse the repo input. (#8536)
-- Add GCP API client functions to support App Hosting deploy from source feature. (#8545)
+- Fixed issue in `init` where users were forced to specify emulator UI port (#8626)
+- Adds MCP tools for App Hosting (#8605)
+- Fixed crash when starting the App Hosting emulator in certain applications (#8624)
+- Fixed issue where, with `webframeworks` enabled, `firebase init hosting` re-prompts users for source. (#8587)
+- Update typescript version in functions template to avoid build issue with @google-cloud/storage depedency (#8194)
